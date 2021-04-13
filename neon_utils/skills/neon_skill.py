@@ -38,7 +38,7 @@ from neon_utils.logger import LOG
 from neon_utils.message_utils import request_from_mobile, get_message_user
 
 LOG.name = "neon-skill"
-ensure_mycroft_import()
+
 from mycroft.skills.mycroft_skill.mycroft_skill import MycroftSkill
 
 
