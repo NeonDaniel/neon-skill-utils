@@ -16,15 +16,13 @@
 # Specialized conversational reconveyance options from Conversation Processing Intelligence Corp.
 # US Patents 2008-2021: US7424516, US20140161250, US20140177813, US8638908, US8068604, US8553852, US10530923, US10530924
 # China Patent: CN102017585  -  Europe Patent: EU2156652  -  Patents Pending
-from time import time, sleep
 
 import io
-
 import sys
-
-import os
 import shutil
 import unittest
+from time import time, sleep
+
 from neon_utils.log_utils import *
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
@@ -39,60 +37,6 @@ class LogUtilTests(unittest.TestCase):
     @classmethod
     def tearDownClass(cls) -> None:
         shutil.rmtree(LOG_PATH)
-
-    def test_skills_log(self):
-        log = get_skills_log(LOG_PATH)
-        test_msg = "This is only a skills test."
-        log.debug(test_msg)
-        with open(os.path.join(LOG_PATH, "skills.log")) as log:
-            contents = log.read()
-        self.assertTrue(contents.endswith(f"{test_msg}\n"))
-
-    def test_audio_log(self):
-        log = get_audio_log(LOG_PATH)
-        test_msg = "This is only an audio test."
-        log.debug(test_msg)
-        with open(os.path.join(LOG_PATH, "audio.log")) as log:
-            contents = log.read()
-        self.assertTrue(contents.endswith(f"{test_msg}\n"))
-
-    def test_speech_log(self):
-        log = get_speech_log(LOG_PATH)
-        test_msg = "This is only a speech test."
-        log.debug(test_msg)
-        with open(os.path.join(LOG_PATH, "voice.log")) as log:
-            contents = log.read()
-        self.assertTrue(contents.endswith(f"{test_msg}\n"))
-
-    def test_bus_log(self):
-        log = get_bus_log(LOG_PATH)
-        test_msg = "This is only a bus test."
-        log.debug(test_msg)
-        with open(os.path.join(LOG_PATH, "bus.log")) as log:
-            contents = log.read()
-        self.assertTrue(contents.endswith(f"{test_msg}\n"))
-
-    def test_server_log(self):
-        log = get_server_log(LOG_PATH)
-        test_msg = "This is only a server test."
-        log.debug(test_msg)
-        with open(os.path.join(LOG_PATH, "server.log")) as log:
-            contents = log.read()
-        self.assertTrue(contents.endswith(f"{test_msg}\n"))
-
-    def test_client_log_with_stdout(self):
-        normal_stdout = sys.stdout
-        captured_out = io.StringIO()
-        sys.stdout = captured_out
-        log = get_client_log(LOG_PATH, True)
-        test_msg = "This is only a client test."
-        log.debug(test_msg)
-        logged = captured_out.getvalue().strip("\n")
-        sys.stdout = normal_stdout
-        with open(os.path.join(LOG_PATH, "client.log")) as log:
-            contents = log.read()
-        self.assertTrue(contents.endswith(f"{test_msg}\n"))
-        self.assertEqual(logged, contents.split("\n")[-2])
 
     def test_get_log_file(self):
         log = get_logger("test", LOG_PATH)
