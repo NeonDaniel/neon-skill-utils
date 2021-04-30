@@ -31,7 +31,7 @@ from typing import Optional
 from dateutil.tz import gettz
 from ovos_utils import ensure_mycroft_import
 from neon_utils import create_signal, check_for_signal, wait_while_speaking
-from neon_utils.configuration_utils import NGIConfig
+from neon_utils.configuration_utils import NGIConfig, is_neon_core
 from neon_utils.location_utils import to_system_time
 from neon_utils.language_utils import get_neon_lang_config, DetectorFactory, TranslatorFactory
 from neon_utils.logger import LOG
@@ -82,7 +82,7 @@ class NeonSkill(MycroftSkill):
             self.server = False
             self.default_intent_timeout = 60
 
-        self.neon_core = True
+        self.neon_core = is_neon_core()
         self.actions_to_confirm = dict()
 
         try:
@@ -437,8 +437,12 @@ class NeonSkill(MycroftSkill):
 
         try:
             if kind == "execute":
+                if self.neon_core:
+                    msg_type = "skills:execute.utterance"
+                else:
+                    msg_type = "recognizer_loop:utterance"
                 # This is picked up in the intent handler
-                return message.reply("skills:execute.utterance", {
+                return message.reply(msg_type, {
                     "utterances": [utt.lower()],
                     "lang": message.data.get("lang", "en-US"),
                     "session": None,
@@ -636,6 +640,9 @@ class NeonSkill(MycroftSkill):
         self.bus.emit(Message("active_skill_request",
                               {"skill_id": self.skill_id,
                                "timeout": duration_minutes}))
+        if not self.neon_core and duration_minutes != 5:
+            LOG.warning("Mycroft does not support keeping skills active for a given duration")
+            # TODO: Some method for keeping skill active DM
 
     def register_decorated(self):
         """
