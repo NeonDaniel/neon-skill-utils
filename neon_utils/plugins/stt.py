@@ -24,6 +24,7 @@ from mycroft_bus_client import MessageBusClient, Message
 
 from speech_recognition import Recognizer
 from neon_utils.configuration_utils import get_neon_speech_config
+from neon_utils.logger import LOG
 try:
     from mycroft.stt import StreamThread
 except ImportError:
@@ -33,6 +34,7 @@ except ImportError:
 class STT(metaclass=ABCMeta):
     """ STT Base class, all  STT backends derives from this one. """
     def __init__(self, config=None):
+        LOG.warning("This reference is depreciated! Update STT module to import from neon_speech.stt")
         config_core = config or get_neon_speech_config()
         metric_upload = config_core.get("metric_upload", False)
         if metric_upload:
