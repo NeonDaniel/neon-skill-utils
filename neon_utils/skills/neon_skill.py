@@ -570,9 +570,9 @@ class NeonSkill(MycroftSkill):
             return True
         else:
             try:
-                voc_match = self.voc_match(message.data.get("utterance"), "neon")
-                if voc_match:
-                    return True
+                return any([match for match in message.data.get("utterances", (message.data.get("utterance")))
+                            if self.voc_match(match, "neon")])
+
             except FileNotFoundError:
                 LOG.error(f"No neon vocab found!")
                 if "neon" in message.data.get("utterance").lower():
