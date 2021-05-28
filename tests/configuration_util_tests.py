@@ -19,9 +19,7 @@
 
 import sys
 import os
-import time
 import unittest
-from ruamel.yaml.scalarfloat import ScalarFloat
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 from neon_utils.configuration_utils import *

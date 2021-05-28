@@ -690,6 +690,7 @@ def _move_config_sections(user_config, local_config):
                           "stt": user_config.content.pop("stt", {}),
                           "logs": user_config.content.pop("logs", {}),
                           "device": user_config.content.pop("device", {})}
+        LOG.warning(config_to_move)
         local_config.update_keys(config_to_move)
 
 
