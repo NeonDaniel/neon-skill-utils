@@ -9,7 +9,7 @@ timezonefinder~=5.2.0
 netifaces~=0.10.9
 filelock~=3.0.12
 nltk~=3.5
-ruamel.yaml~=0.16.12
+ruamel.yaml==0.15.100
 pydub~=0.25.1
 fastlang==0.0.4
 langdetect~=1.0.8

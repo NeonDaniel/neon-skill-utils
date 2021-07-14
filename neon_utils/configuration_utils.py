@@ -47,9 +47,9 @@ class NGIConfig:
     def __init__(self, name, path=None, force_reload: bool = False):
         self.name = name
         self.path = path or get_config_dir()
-        self.parser = YAML()
+        self._parser = YAML()
         lock_filename = join(self.path, f".{self.name}.lock")
-        self.lock = FileLock(lock_filename, timeout=10)
+        self._lock = FileLock(lock_filename, timeout=10)
         self._pending_write = False
         self._content = dict()
         self._loaded = os.path.getmtime(self.file_path)
@@ -238,9 +238,9 @@ class NGIConfig:
         """
         try:
             self._loaded = os.path.getmtime(self.file_path)
-            with self.lock.acquire(30):
+            with self._lock.acquire(30):
                 with open(self.file_path, 'r') as f:
-                    return self.parser.load(f) or dict()
+                    return self._parser.load(f) or dict()
         except FileNotFoundError as x:
             LOG.error(f"Configuration file not found error: {x}")
         except Exception as c:
@@ -252,12 +252,12 @@ class NGIConfig:
         Overwrites and/or updates the YML at the specified file_path.
         """
         try:
-            with self.lock.acquire(30):
+            with self._lock.acquire(30):
                 tmp_filename = join(self.path, f".{self.name}.tmp")
                 LOG.debug(f"tmp_filename={tmp_filename}")
                 shutil.copy2(self.file_path, tmp_filename)
                 with open(self.file_path, 'w+') as f:
-                    self.parser.dump(self._content, f)
+                    self._parser.dump(self._content, f)
                     LOG.debug(f"YAML updated {self.name}")
                 self._loaded = os.path.getmtime(self.file_path)
                 self._pending_write = False
@@ -900,6 +900,8 @@ def create_config_from_setup_params(path=None) -> NGIConfig:
 
     if os.environ.get("installServer", "false") == "true":
         local_conf["devVars"]["devType"] = "server"
+    elif os.environ.get("raspberryPi", "false") == "true":
+        local_conf["devVars"]["devType"] = "pi"
     else:
         import platform
         local_conf["devVars"]["devType"] = platform.system().lower()
