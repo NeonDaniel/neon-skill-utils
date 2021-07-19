@@ -38,7 +38,7 @@ setuptools.setup(
     version=version,
     author="NeonDaniel",
     author_email="daniel@neon.ai",
-    description="Utilities for running Neon skills in Mycroft/OVOS",
+    description="Utilities for NeonAI",
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/neongeckocom/neon-skill-utils",
@@ -50,5 +50,10 @@ setuptools.setup(
         "Operating System :: OS Independent"
     ],
     python_requires='>=3.6',
-    install_requires=requirements
+    install_requires=requirements,
+    entry_points={
+        'console_scripts': [
+            "neon-config-import=neon_utils.configuration_utils:create_config_from_setup_params"
+        ]
+    }
 )

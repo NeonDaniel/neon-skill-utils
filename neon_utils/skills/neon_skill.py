@@ -20,26 +20,41 @@
 import pathlib
 import pickle
 import json
+import shutil
 import time
 import os
+import re
 
 from copy import deepcopy
+from functools import wraps
+from itertools import chain
 from mycroft_bus_client.message import Message, dig_for_message
 from neon_utils.file_utils import get_most_recent_file_in_dir
 from ruamel.yaml.comments import CommentedMap
 from typing import Optional
 from dateutil.tz import gettz
-from ovos_utils import ensure_mycroft_import
 from neon_utils import create_signal, check_for_signal, wait_while_speaking
 from neon_utils.configuration_utils import NGIConfig
 from neon_utils.location_utils import to_system_time
 from neon_utils.language_utils import get_neon_lang_config, DetectorFactory, TranslatorFactory
 from neon_utils.logger import LOG
 from neon_utils.message_utils import request_from_mobile, get_message_user
+from neon_utils.cache_utils import LRUCache
+
+from mycroft.skills.mycroft_skill.mycroft_skill import MycroftSkill
+from mycroft.skills.skill_data import read_vocab_file
 
 LOG.name = "neon_skill"
-ensure_mycroft_import()
-from mycroft.skills.mycroft_skill.mycroft_skill import MycroftSkill
+
+
+# TODO if accepted, make changes to QASkill and WikipediaSkill
+# Available_modes are 1) quick; 2) thoughtful.
+SPEED_MODE_EXTENSION_TIME = {
+    "quick": 1,
+    "thoughtful": 10
+}
+DEFAULT_SPEED_MODE = "thoughtful"
+CACHE_TIME_OFFSET = 24*60*60  # seconds in 24 hours
 
 
 class NeonSkill(MycroftSkill):
@@ -51,15 +66,16 @@ class NeonSkill(MycroftSkill):
 
         super(NeonSkill, self).__init__(name, bus, use_settings)
 
-        self.cache_loc = self.configuration_available.get('dirVars', {}).get('cacheDir',
-                                                                             os.path.expanduser("~/.neon/cache"))
+        self.cache_loc = os.path.expanduser(self.local_config.get('dirVars', {}).get('cacheDir') or
+                                            "~/.local/share/neon/cache")
+        self.lru_cache = LRUCache()
 
         # TODO: Depreciate these references, signal use is discouraged DM
         self.create_signal = create_signal
         self.check_for_signal = check_for_signal
 
         self.sys_tz = gettz()
-        self.gui_enabled = self.configuration_available.get("prefFlags", {}).get("guiEvents", False)
+        self.gui_enabled = self.local_config.get("prefFlags", {}).get("guiEvents", False)
 
         if use_settings:
             self.settings = {}
@@ -75,7 +91,7 @@ class NeonSkill(MycroftSkill):
         # A server is a device that hosts the core and skills to serve clients,
         # but that a user will not interact with directly.
         # A server will likely serve multiple users and devices concurrently.
-        if self.configuration_available.get("devVars", {}).get("devType", "generic") == "server":
+        if self.local_config.get("devVars", {}).get("devType", "generic") == "server":
             self.server = True
             self.default_intent_timeout = 90
         else:
@@ -85,6 +101,9 @@ class NeonSkill(MycroftSkill):
         self.neon_core = True
         self.actions_to_confirm = dict()
 
+        self.skill_mode = self.user_config.content.get('response_mode').get('speed_mode') or DEFAULT_SPEED_MODE
+        self.extension_time = SPEED_MODE_EXTENSION_TIME.get(self.skill_mode)
+
         try:
             # Lang support
             self.language_config = get_neon_lang_config()
@@ -93,6 +112,10 @@ class NeonSkill(MycroftSkill):
         except Exception as e:
             LOG.error(e)
             self.language_config, self.language_detector, self.translator = None, None, None
+
+    def initialize(self):
+        # schedule an event to load the cache on disk every CACHE_TIME_OFFSET seconds
+        self.schedule_event(self._write_cache_on_disk, CACHE_TIME_OFFSET, name="neon.load_cache_on_disk")
 
     @property
     def user_info_available(self):
@@ -137,7 +160,10 @@ class NeonSkill(MycroftSkill):
                         default[pref["name"]] = value
 
         # Load or init configuration
-        self.ngi_settings = NGIConfig(self.name, self.root_dir)
+        if os.path.isfile(os.path.join(self.root_dir, f"{self.name}.yml")):
+            LOG.warning(f"Config found in skill directory for {self.name}! Relocating to: {self.file_system.path}")
+            shutil.move(os.path.join(self.root_dir, f"{self.name}.yml"), self.file_system.path)
+        self.ngi_settings = NGIConfig(self.name, self.file_system.path)
 
         # Load any new or updated keys
         try:
@@ -534,6 +560,35 @@ class NeonSkill(MycroftSkill):
                     return True
         return False
 
+    def voc_match(self, utt, voc_filename, lang=None, exact=False):
+        # TODO: Handles bug to be addressed in: https://github.com/OpenVoiceOS/ovos_utils/issues/73
+        try:
+            return super().voc_match(utt, voc_filename, lang, exact)
+        except FileNotFoundError:
+            LOG.warning(f"`{voc_filename}` not found, checking in neon_core")
+            from mycroft.skills.skill_data import read_vocab_file
+            from itertools import chain
+            import re
+        lang = lang or self.lang
+        voc = os.path.join(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "neon_core",
+                           "res", "text", lang, f"{voc_filename}.voc")
+        if not os.path.exists(voc):
+            raise FileNotFoundError(voc)
+        vocab = read_vocab_file(voc)
+        cache_key = lang + voc_filename
+        self.voc_match_cache[cache_key] = list(chain(*vocab))
+        if utt:
+            if exact:
+                # Check for exact match
+                return any(i.strip() == utt
+                           for i in self.voc_match_cache[cache_key])
+            else:
+                # Check for matches against complete words
+                return any([re.match(r'.*\b' + i + r'\b.*', utt)
+                            for i in self.voc_match_cache[cache_key]])
+        else:
+            return False
+
     def neon_in_request(self, message):
         """
         Checks if the utterance is intended for Neon. Server utilizes current conversation, otherwise wake-word status
@@ -545,11 +600,17 @@ class NeonSkill(MycroftSkill):
             return True
         elif not self.server and self.local_config.get("interface", {}).get("wake_word_enabled", True):
             return True
-        elif self.voc_match(message.data.get("utterance"), "neon"):
-            return True
         elif self.server and message.context.get("klat_data", {}).get("title").startswith("!PRIVATE"):
             return True
         else:
+            try:
+                voc_match = self.voc_match(message.data.get("utterance"), "neon")
+                if voc_match:
+                    return True
+            except FileNotFoundError:
+                LOG.error(f"No neon vocab found!")
+                if "neon" in message.data.get("utterance").lower():
+                    return True
             LOG.debug("No Neon")
             return False
 
@@ -734,7 +795,7 @@ class NeonSkill(MycroftSkill):
         # TODO: should 'when' already be a datetime? DM
         if isinstance(when, int) or isinstance(when, float):
             from datetime import datetime as dt, timedelta
-            when = self.to_system_time(dt.now(self.sys_tz)) + timedelta(seconds=when)
+            when = to_system_time(dt.now(self.sys_tz)) + timedelta(seconds=when)
             LOG.info(f"Made a datetime: {when}")
         super().schedule_event(handler, when, data, name, context)
 
@@ -774,8 +835,8 @@ class NeonSkill(MycroftSkill):
 
         self.cancel_scheduled_event(user)
         time.sleep(1)
-        self.schedule_event(self._confirmation_timeout, self.to_system_time(expiration), data={"user": user,
-                                                                                               "action": actions},
+        self.schedule_event(self._confirmation_timeout, to_system_time(expiration), data={"user": user,
+                                                                                          "action": actions},
                             name=user)
         LOG.debug(f"Scheduled {user}")
 
@@ -793,13 +854,13 @@ class NeonSkill(MycroftSkill):
 
     def clear_gui_timeout(self, timeout_seconds=60):
         """
-        Calledby a skill to clear its gui display after the specified timeout
+        Called by a skill to clear its gui display after the specified timeout
         :param timeout_seconds: seconds to wait before clearing gui display
         :return:
         """
         from datetime import datetime as dt, timedelta
         expiration = dt.now(self.sys_tz) + timedelta(seconds=timeout_seconds)
-        self.schedule_event(self._clear_gui_timeout, self.to_system_time(expiration))
+        self.schedule_event(self._clear_gui_timeout, to_system_time(expiration))
 
     def _clear_gui_timeout(self):
         """
@@ -815,8 +876,8 @@ class NeonSkill(MycroftSkill):
         may have set
         :param prefix: (str) prefix to match
         """
-        os.makedirs(f"{self.configuration_available['dirVars']['ipcDir']}/signal", exist_ok=True)
-        for signal in os.listdir(self.configuration_available['dirVars']['ipcDir'] + '/signal'):
+        os.makedirs(f"{self.local_config['dirVars']['ipcDir']}/signal", exist_ok=True)
+        for signal in os.listdir(self.local_config['dirVars']['ipcDir'] + '/signal'):
             if str(signal).startswith(prefix) or f"_{prefix}_" in str(signal):
                 # LOG.info('Removing ' + str(signal))
                 # os.remove(self.configuration_available['dirVars']['ipcDir'] + '/signal/' + signal)
@@ -884,3 +945,39 @@ class NeonSkill(MycroftSkill):
     def to_system_time(dt):
         LOG.warning("This method is depreciated, use location_utils.to_system_time() directly")
         return to_system_time(dt)
+
+    def decorate_api_call_use_lru(self, func):
+        """
+        Decorate the API-call function to use LRUcache.
+        NOTE: the wrapper adds an additional argument, so decorated functions MUST be called with it!
+
+        from wikipedia_for_humans import summary
+        summary = decorate_api_call_use_lru(summary)
+        result = summary(lru_query='neon', query='neon', lang='en')
+
+        Args:
+            func: the function to be decorated
+        Returns: decorated function
+        """
+        @wraps(func)
+        def wrapper(lru_query: str, *args, **kwargs):
+            # TODO might use an abstract method for cached API call to define a signature
+            result = self.lru_cache.get(lru_query)
+            if not result:
+                result = func(*args, **kwargs)
+                self.lru_cache.put(key=lru_query, value=result)
+            return result
+        return wrapper
+
+    def _write_cache_on_disk(self):
+        """
+        Write the cache on disk, reset the cache and reschedule the event.
+        This handler is enabled by scheduling an event in NeonSkill.initialize().
+        Returns:
+        """
+        filename = f"lru_{self.skill_id}"
+        data_load = self.lru_cache.jsonify()
+        self.update_cached_data(filename=filename, new_element=data_load)
+        self.lru_cache.clear()
+        self.schedule_event(self._write_cache_on_disk, CACHE_TIME_OFFSET, name="neon.load_cache_on_disk")
+        return

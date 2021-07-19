@@ -19,11 +19,12 @@
 
 import sys
 import os
-import time
 import unittest
+from time import sleep
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 from neon_utils.configuration_utils import *
+from neon_utils.authentication_utils import *
 
 ROOT_DIR = os.path.dirname(os.path.realpath(__file__))
 CONFIG_PATH = os.path.join(ROOT_DIR, "configuration")
@@ -36,9 +37,13 @@ TEST_DICT = {"section 1": {"key1": "val1",
 
 class ConfigurationUtilTests(unittest.TestCase):
     def doCleanups(self) -> None:
-        for file in glob(os.path.join(CONFIG_PATH, "*.lock")):
+        for file in glob(os.path.join(CONFIG_PATH, ".*.lock")):
             os.remove(file)
-        for file in glob(os.path.join(CONFIG_PATH, "*.tmp")):
+        for file in glob(os.path.join(CONFIG_PATH, ".*.tmp")):
+            os.remove(file)
+        for file in glob(os.path.join(ROOT_DIR, "credentials", ".*.lock")):
+            os.remove(file)
+        for file in glob(os.path.join(ROOT_DIR, "credentials", ".*.tmp")):
             os.remove(file)
         if os.path.exists(os.path.join(CONFIG_PATH, "old_user_info.yml")):
             os.remove(os.path.join(CONFIG_PATH, "old_user_info.yml"))
@@ -250,7 +255,7 @@ class ConfigurationUtilTests(unittest.TestCase):
         self.assertIsInstance(config["disabled"], bool)
 
     def test_get_device_type(self):
-        self.assertEqual(get_neon_device_type(), "desktop")
+        self.assertIn(get_neon_device_type(), ("desktop", "pi", "linux"))
 
     def test_get_speech_config(self):
         config = get_neon_speech_config()
@@ -260,6 +265,13 @@ class ConfigurationUtilTests(unittest.TestCase):
         self.assertIsInstance(config["hotwords"], dict)
         self.assertIsInstance(config["listener"]["wake_word_enabled"], bool)
         self.assertIsInstance(config["listener"]["phoneme_duration"], int)
+
+    def test_get_audio_config(self):
+        config = get_neon_audio_config()
+        self.assertIsInstance(config, dict)
+        self.assertIsInstance(config["Audio"], dict)
+        self.assertIsInstance(config["tts"], dict)
+        self.assertIsInstance(config["language"], dict)
 
     def test_get_user_config_add_keys(self):
         old_user_info = os.path.join(CONFIG_PATH, "old_user_info.yml")
@@ -365,6 +377,12 @@ class ConfigurationUtilTests(unittest.TestCase):
         self.assertIn("skillsGit", config["remoteVars"])
         self.assertIsInstance(config["server_addr"], str)
 
+    def test_get_transcribe_config(self):
+        config = get_neon_transcribe_config()
+        self.assertIsInstance(config, dict)
+        self.assertIsInstance(config["audio_permission"], bool)
+        self.assertIsInstance(config["transcript_dir"], str)
+
     def test_get_tts_config(self):
         config = get_neon_tts_config()
         self.assertIsInstance(config["module"], str)
@@ -377,13 +395,23 @@ class ConfigurationUtilTests(unittest.TestCase):
         self.assertIsInstance(config["priority"], list)
         self.assertIsInstance(config["update_interval"], float)
         self.assertIsInstance(config["data_dir"], str)
+        self.assertIsInstance(config["skill_manager"], str)
+
+        self.assertIsInstance(config["install_default"], bool)
+        self.assertIsInstance(config["install_essential"], bool)
+        self.assertIn("default_skills", config)
+        self.assertIn("essential_skills", config)
+        self.assertIn("neon_token", config)
+
+        self.assertEqual(config["update_interval"], config["auto_update_interval"])  # Backwards Compat.
+        self.assertIsInstance(config["directory"], str)
+        self.assertIsInstance(config["disable_osm"], bool)
 
         if config.get("msm"):
             self.assertIsInstance(config["msm"], dict)
             self.assertIsInstance(config["msm"]["directory"], str)
             self.assertIsInstance(config["msm"]["versioned"], bool)
             self.assertIsInstance(config["msm"]["repo"], dict)
-            self.assertIsInstance(config["enclosure"], dict)
 
             self.assertIsInstance(config["msm"]["repo"]["branch"], str)
             self.assertIsInstance(config["msm"]["repo"]["cache"], str)
@@ -395,6 +423,8 @@ class ConfigurationUtilTests(unittest.TestCase):
         self.assertIsInstance(mycroft_config["gui_websocket"], dict)
         self.assertIsInstance(mycroft_config["gui_websocket"]["host"], str)
         self.assertIsInstance(mycroft_config["gui_websocket"]["base_port"], int)
+        self.assertIsInstance(mycroft_config["keys"], dict)
+        # self.assertEqual(mycroft_config["skills"]["directory"], mycroft_config["skills"]["directory_override"])
         # self.assertIsInstance(mycroft_config["language"], dict)
         # self.assertIsInstance(mycroft_config["listener"], dict)
         # self.assertIsInstance(mycroft_config["stt"], dict)
@@ -445,11 +475,9 @@ class ConfigurationUtilTests(unittest.TestCase):
 
         shutil.copy(ngi_local_conf, bak_local_conf)
 
-        i = 0
         config_objects = []
-        while i < 100:
+        for i in range(100):
             config_objects.append(NGIConfig("ngi_local_conf", CONFIG_PATH, True))
-            i += 1
 
         first_config = config_objects[0]
         last_config = config_objects[-1]
@@ -464,6 +492,22 @@ class ConfigurationUtilTests(unittest.TestCase):
 
         shutil.move(bak_local_conf, ngi_local_conf)
 
+    def test_concurrent_config_read(self):
+        from threading import Thread
+        valid_config = NGIConfig("dep_user_info", CONFIG_PATH)
+        test_results = {}
+
+        def _open_config(idx):
+            from neon_utils.configuration_utils import NGIConfig as Config
+            config = Config("dep_user_info", CONFIG_PATH, True)
+            test_results[idx] = config.content == valid_config.content
+
+        for i in range(10):
+            Thread(target=_open_config, args=(i,), daemon=True).start()
+        while not len(test_results.keys()) == 10:
+            sleep(0.5)
+        self.assertTrue(all(test_results.values()))
+
     def test_new_ngi_config(self):
         config = NGIConfig("temp_conf", CONFIG_PATH)
         self.assertIsInstance(config.content, dict)
@@ -476,6 +520,108 @@ class ConfigurationUtilTests(unittest.TestCase):
         local_config = NGIConfig("ngi_local_conf")
         speech_config = get_neon_speech_config()
         self.assertNotEqual(speech_config.get("listener"), local_config["listener"])
+
+    def test_create_config_from_setup_params_dev_mode(self):
+        test_dir = f"{ROOT_DIR}/test_setup_config"
+        os.environ["devMode"] = "true"
+        os.environ["autoStart"] = "true"
+        os.environ["autoUpdate"] = "true"
+        os.environ["devName"] = "Test-Device"
+        os.environ["sttModule"] = "stt_module"
+        os.environ["ttsModule"] = "tts_module"
+        os.environ["installServer"] = "false"
+        os.environ["installerDir"] = test_dir
+        os.environ["GITHUB_TOKEN"] = "git_token"
+        local_config = create_config_from_setup_params(test_dir)
+
+        self.assertTrue(local_config["prefFlags"]["devMode"])
+        self.assertTrue(local_config["prefFlags"]["autoStart"])
+        self.assertTrue(local_config["prefFlags"]["autoUpdate"])
+        self.assertEqual(local_config["devVars"]["devName"], "Test-Device")
+        self.assertEqual(local_config["devVars"]["devType"], "linux")
+        self.assertEqual(local_config["stt"]["module"], "stt_module")
+        self.assertEqual(local_config["tts"]["module"], "tts_module")
+
+        self.assertEqual(local_config["dirVars"]["skillsDir"], os.path.join(test_dir, "skills"))
+        self.assertEqual(local_config["dirVars"]["diagsDir"], os.path.join(test_dir, "Diagnostics"))
+        self.assertEqual(local_config["dirVars"]["logsDir"], os.path.join(test_dir, "logs"))
+
+        shutil.rmtree(test_dir)
+        NGIConfig.configuration_list = dict()
+
+    def test_create_config_from_setup_params_non_dev_mode(self):
+        test_dir = f"{ROOT_DIR}/test_setup_config"
+        os.environ["devMode"] = "false"
+        os.environ["autoStart"] = "true"
+        os.environ["autoUpdate"] = "true"
+        os.environ["devName"] = "Test-Device"
+        os.environ["sttModule"] = "stt_module"
+        os.environ["ttsModule"] = "tts_module"
+        os.environ["installServer"] = "false"
+        os.environ["installerDir"] = test_dir
+        os.environ["GITHUB_TOKEN"] = "git_token"
+        local_config = create_config_from_setup_params(test_dir)
+
+        self.assertFalse(local_config["prefFlags"]["devMode"])
+        self.assertTrue(local_config["prefFlags"]["autoStart"])
+        self.assertTrue(local_config["prefFlags"]["autoUpdate"])
+        self.assertEqual(local_config["devVars"]["devName"], "Test-Device")
+        self.assertEqual(local_config["devVars"]["devType"], "linux")
+        self.assertEqual(local_config["stt"]["module"], "stt_module")
+        self.assertEqual(local_config["tts"]["module"], "tts_module")
+
+        self.assertEqual(local_config["dirVars"]["skillsDir"], "~/.local/share/neon/skills")
+        self.assertEqual(local_config["dirVars"]["diagsDir"], "~/Documents/NeonGecko/Diagnostics")
+        self.assertEqual(local_config["dirVars"]["logsDir"], "~/.local/share/neon/logs")
+
+        shutil.rmtree(test_dir)
+        NGIConfig.configuration_list = dict()
+
+    def test_unequal_cache_configs(self):
+        bak_local_conf = os.path.join(CONFIG_PATH, "ngi_local_conf.bak")
+        ngi_local_conf = os.path.join(CONFIG_PATH, "ngi_local_conf.yml")
+        shutil.copy(ngi_local_conf, bak_local_conf)
+
+        def_config = get_neon_local_config(f"{ROOT_DIR}/test")
+        oth_config = get_neon_local_config(CONFIG_PATH)
+        self.assertNotEqual(def_config, oth_config)
+        self.assertNotEqual(def_config.content, oth_config.content)
+
+        shutil.rmtree(f"{ROOT_DIR}/test")
+        shutil.move(bak_local_conf, ngi_local_conf)
+
+    def test_added_module_config(self):
+        bak_local_conf = os.path.join(CONFIG_PATH, "ngi_local_conf.bak")
+        ngi_local_conf = os.path.join(CONFIG_PATH, "ngi_local_conf.yml")
+        ngi_test_conf = os.path.join(CONFIG_PATH, "local_conf_with_stt_tts.yml")
+
+        shutil.move(ngi_local_conf, bak_local_conf)
+        shutil.copy(ngi_test_conf, ngi_local_conf)
+        local_config = get_neon_local_config(CONFIG_PATH)
+        self.assertEqual(local_config["tts"]["mozilla_remote"], {"url": "http://something.somewhere"})
+        self.assertEqual(local_config["stt"]["some_module"], {"key": "value"})
+        self.assertIn("dirVars", local_config.content.keys())
+        shutil.move(bak_local_conf, ngi_local_conf)
+
+    def test_get_neon_auth_config(self):
+        auth_path = os.path.join(ROOT_DIR, "credentials")
+        ngi_auth_vars = get_neon_auth_config(auth_path)
+        self.assertEqual(ngi_auth_vars["amazon"], find_neon_aws_keys(auth_path))
+        self.assertEqual(ngi_auth_vars["google"], find_neon_google_keys(auth_path))
+        self.assertEqual(ngi_auth_vars["github"], {"token": find_neon_git_token(auth_path)})
+        self.assertEqual(ngi_auth_vars["wolfram"], {"app_id": find_neon_wolfram_key(auth_path)})
+        self.assertEqual(ngi_auth_vars["alpha_vantage"], {"api_key": find_neon_alpha_vantage_key(auth_path)})
+        self.assertEqual(ngi_auth_vars["owm"], {"api_key": find_neon_owm_key(auth_path)})
+        os.remove(ngi_auth_vars.file_path)
+
+    def test_write_mycroft_compatible_config(self):
+        test_path = os.path.join(CONFIG_PATH, "test.conf")
+        config = get_mycroft_compatible_config()
+        write_mycroft_compatible_config(test_path)
+        with open(test_path) as f:
+            from_disk = json.load(f)
+        self.assertEqual(from_disk, config)
+        os.remove(test_path)
 
 
 if __name__ == '__main__':

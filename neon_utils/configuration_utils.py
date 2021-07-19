@@ -16,16 +16,18 @@
 # Specialized conversational reconveyance options from Conversation Processing Intelligence Corp.
 # US Patents 2008-2021: US7424516, US20140161250, US20140177813, US8638908, US8068604, US8553852, US10530923, US10530924
 # China Patent: CN102017585  -  Europe Patent: EU2156652  -  Patents Pending
-import re
 
+import logging
+import re
 import json
 import os
 import sys
 import shutil
 import sysconfig
+
 from copy import deepcopy
 from os.path import *
-from collections import MutableMapping
+from collections.abc import MutableMapping
 from contextlib import suppress
 from filelock import FileLock
 from glob import glob
@@ -34,6 +36,9 @@ from ovos_utils.configuration import read_mycroft_config, LocalConf
 from ruamel.yaml import YAML
 from typing import Optional
 from neon_utils import LOG
+from neon_utils.authentication_utils import find_neon_git_token, populate_github_token_config, build_new_auth_config
+
+logging.getLogger("filelock").setLevel(logging.WARNING)
 
 
 class NGIConfig:
@@ -55,6 +60,19 @@ class NGIConfig:
         else:
             self._content = self._load_yaml_file()
             NGIConfig.configuration_list[self.__repr__()] = self
+        self._disk_content_hash = hash(repr(self._content))
+
+    @property
+    def file_path(self):
+        """
+        Returns the path to the yml file associated with this configuration
+        Returns: path to this configuration yml
+        """
+        file_path = join(self.path, self.name + ".yml")
+        if not isfile(file_path):
+            create_file(file_path)
+            LOG.debug(f"New YAML created: {file_path}")
+        return file_path
 
     @property
     def requires_reload(self):
@@ -65,7 +83,7 @@ class NGIConfig:
             self.check_for_updates()
 
     def write_changes(self):
-        if self._pending_write:
+        if self._pending_write or self._disk_content_hash != hash(repr(self._content)):
             self._write_yaml_file()
 
     def populate(self, content, check_existing=False):
@@ -114,18 +132,6 @@ class NGIConfig:
             return
 
         self._write_yaml_file()
-
-    @property
-    def file_path(self):
-        """
-        Returns the path to the yml file associated with this configuration
-        Returns: path to this configuration yml
-        """
-        file_path = join(self.path, self.name + ".yml")
-        if not isfile(file_path):
-            create_file(file_path)
-            LOG.debug(f"New YAML created: {file_path}")
-        return file_path
 
     def check_for_updates(self) -> dict:
         """
@@ -232,7 +238,7 @@ class NGIConfig:
         """
         try:
             self._loaded = os.path.getmtime(self.file_path)
-            with self.lock:
+            with self.lock.acquire(30):
                 with open(self.file_path, 'r') as f:
                     return self.parser.load(f) or dict()
         except FileNotFoundError as x:
@@ -247,7 +253,7 @@ class NGIConfig:
         """
         try:
             with self.lock.acquire(30):
-                tmp_filename = join(self.path, self.name + ".tmp")
+                tmp_filename = join(self.path, f".{self.name}.tmp")
                 LOG.debug(f"tmp_filename={tmp_filename}")
                 shutil.copy2(self.file_path, tmp_filename)
                 with open(self.file_path, 'w+') as f:
@@ -255,6 +261,7 @@ class NGIConfig:
                     LOG.debug(f"YAML updated {self.name}")
                 self._loaded = os.path.getmtime(self.file_path)
                 self._pending_write = False
+                self._disk_content_hash = hash(repr(self._content))
         except FileNotFoundError as x:
             LOG.error(f"Configuration file not found error: {x}")
 
@@ -291,10 +298,10 @@ class NGIConfig:
         self._content[key] = value
 
     def __repr__(self):
-        return "NGIConfig('{}') \n {}".format(self.name, self.file_path)
+        return f"NGIConfig('{self.name}')@{self.file_path}"
 
     def __str__(self):
-        return "{}: {}".format(self.file_path, json.dumps(self._content, indent=4))
+        return f"{self.file_path}: {json.dumps(self._content, indent=4)}"
 
     def __add__(self, other):
         # with self.lock.acquire(30):
@@ -353,8 +360,11 @@ def get_config_dir():
                 return join(clean_path, "NGI")
             elif exists(join(clean_path, "mycroft")):
                 return clean_path
+            elif exists(join(clean_path, ".venv")):
+                # LOG.info(f"Saving config to .venv path: {clean_path}")
+                return clean_path
     default_path = expanduser("~/.local/share/neon")
-    LOG.warning(f"No Neon Core Found! Using default configuration at ~/.local/share/neon")
+    # LOG.info(f"System packaged core found! Using default configuration at {default_path}")
     return default_path
 
 
@@ -430,7 +440,7 @@ def dict_make_equal_keys(dct_to_change: MutableMapping, keys_dct: MutableMapping
         raise AttributeError("merge_recursive_dicts expects two dict objects as args")
     for key in list(dct_to_change.keys()):
         if isinstance(keys_dct.get(key), dict) and isinstance(dct_to_change[key], MutableMapping):
-            if max_depth > cur_depth:
+            if max_depth > cur_depth and key not in ("tts", "stt"):
                 dct_to_change[key] = dict_make_equal_keys(dct_to_change[key], keys_dct[key], max_depth, cur_depth + 1)
         elif key not in keys_dct.keys():
             dct_to_change.pop(key)
@@ -485,7 +495,7 @@ def get_neon_lang_config() -> dict:
     """
     core_config = get_neon_local_config()
     language_config = deepcopy(get_neon_user_config().content.get("speech", {}))
-    language_config["internal"] = language_config.get("internal", "en-us")
+    language_config["internal"] = language_config.get("internal", "en-us")  # TODO: This is core, not user DM
     language_config["user"] = language_config.get("stt_language", "en-us")
     language_config["boost"] = False
     language_config["detection_module"] = core_config.get("stt", {}).get("detection_module")
@@ -594,12 +604,16 @@ def get_neon_audio_config() -> dict:
     Returns:
         dict of config params used for the Audio module
     """
-    mycroft = _safe_mycroft_config().get("Audio", {})
-    neon = get_neon_local_config().get("audioService", {})
-    merged = {**mycroft, **neon}
-    if merged.keys() != neon.keys():
-        LOG.warning(f"Keys missing from Neon config! {merged.keys()}")
-    return merged
+    mycroft = _safe_mycroft_config()
+    local_config = get_neon_local_config()
+    neon_audio = local_config.get("audioService", {})
+    merged_audio = {**mycroft.get("Audio", {}), **neon_audio}
+    if merged_audio.keys() != neon_audio.keys():
+        LOG.warning(f"Keys missing from Neon config! {merged_audio.keys()}")
+
+    return {"Audio": merged_audio,
+            "tts": get_neon_tts_config(),
+            "language": get_neon_lang_config()}
 
 
 def get_neon_api_config() -> dict:
@@ -627,9 +641,29 @@ def get_neon_skills_config() -> dict:
     core_config = get_neon_local_config()
     mycroft_config = _safe_mycroft_config()
     neon_skills = deepcopy(core_config.get("skills", {}))
-    neon_skills["directory"] = core_config["dirVars"].get("skillsDir")
-    skills_config = {**neon_skills, **mycroft_config.get("skills", {})}
-    # neon_skills["neon_token"]  # TODO: GetPrivateKeys
+    neon_skills["directory"] = os.path.expanduser(core_config["dirVars"].get("skillsDir"))
+    neon_skills["directory_override"] = neon_skills["directory"]
+    neon_skills["disable_osm"] = neon_skills["skill_manager"] != "osm"
+    if not isinstance(neon_skills["auto_update_interval"], float):
+        try:
+            neon_skills["auto_update_interval"] = float(neon_skills["auto_update_interval"])
+        except Exception as e:
+            LOG.error(e)
+            neon_skills["auto_update_interval"] = 24.0
+    if not isinstance(neon_skills["appstore_sync_interval"], float):
+        try:
+            neon_skills["appstore_sync_interval"] = float(neon_skills["appstore_sync_interval"])
+        except Exception as e:
+            LOG.error(e)
+            neon_skills["appstore_sync_interval"] = 6.0
+    neon_skills["update_interval"] = neon_skills["auto_update_interval"]  # Backwards Compat.
+    if not neon_skills["neon_token"]:
+        try:
+            neon_skills["neon_token"] = find_neon_git_token()  # TODO: GetPrivateKeys
+            populate_github_token_config(neon_skills["neon_token"])
+        except FileNotFoundError:
+            LOG.warning(f"No Github token found; skills may fail to install!")
+    skills_config = {**mycroft_config.get("skills", {}), **neon_skills}
     return skills_config
 
 
@@ -642,6 +676,15 @@ def get_neon_client_config() -> dict:
     return {"server_addr": server_addr,
             "devVars": core_config["devVars"],
             "remoteVars": core_config["remoteVars"]}
+
+
+def get_neon_transcribe_config() -> dict:
+    local_config = get_neon_local_config()
+    user_config = get_neon_user_config()
+    neon_transcribe_config = dict()
+    neon_transcribe_config["transcript_dir"] = local_config["dirVars"].get("docsDir", "")
+    neon_transcribe_config["audio_permission"] = user_config["privacy"].get("save_audio", False)
+    return neon_transcribe_config
 
 
 def _move_config_sections(user_config, local_config):
@@ -686,7 +729,7 @@ def get_neon_user_config(path: Optional[str] = None) -> NGIConfig:
     Args:
         path: optional path to yml configuration files
     Returns:
-        NGIConfig
+        NGIConfig object with user config
     """
     user_config = NGIConfig("ngi_user_info", path)
     default_user_config = NGIConfig("default_user_conf",
@@ -701,14 +744,14 @@ def get_neon_user_config(path: Optional[str] = None) -> NGIConfig:
     return user_config
 
 
-def get_neon_local_config(path: Optional[str] = None):
+def get_neon_local_config(path: Optional[str] = None) -> NGIConfig:
     """
     Returns a dict local configuration and handles any
      migration of configuration values to local config from user config
     Args:
         path: optional path to yml configuration files
     Returns:
-        dict of local configuration
+        NGIConfig object with local config
     """
     local_config = NGIConfig("ngi_local_conf", path)
     default_local_config = NGIConfig("default_core_conf",
@@ -721,7 +764,24 @@ def get_neon_local_config(path: Optional[str] = None):
     _move_config_sections(user_config, local_config)
     local_config.make_equal_by_keys(default_local_config.content)
     LOG.info(f"Loaded local config from {local_config.file_path}")
-    return dict(local_config.content)
+    return local_config
+
+
+def get_neon_auth_config(path: Optional[str] = None) -> NGIConfig:
+    """
+    Returns a dict authentication configuration and handles populating values from key files
+    Args:
+        path: optional path to yml configuration files
+    Returns:
+        NGIConfig object with authentication config
+    """
+    auth_config = NGIConfig("ngi_auth_vars", path)
+    if not auth_config.content:
+        LOG.info("Populating empty auth configuration")
+        auth_config._content = build_new_auth_config(path)
+
+    LOG.info(f"Loaded auth config from {auth_config.file_path}")
+    return auth_config
 
 
 def get_neon_device_type() -> str:
@@ -756,11 +816,11 @@ def is_neon_core() -> bool:
         True if core is Neon, else False
     """
     import importlib.util
-    if importlib.util.find_spec("neon-speech"):
+    if importlib.util.find_spec("neon_speech"):
         return True
-    if importlib.util.find_spec("neon-core-client"):
+    if importlib.util.find_spec("neon_core_client"):
         return True
-    if importlib.util.find_spec("neon-core-server"):
+    if importlib.util.find_spec("neon_core_server"):
         return True
     return False
 
@@ -776,7 +836,7 @@ def get_mycroft_compatible_config(mycroft_only=False):
 
     default_config["lang"] = "en-us"
     default_config["language"] = get_neon_lang_config()
-    default_config["keys"] = {}  # TODO: Get keys DM
+    default_config["keys"] = get_neon_auth_config().content
     # default_config["text_parsers"]  TODO
     default_config["audio_parsers"] = speech["audio_parsers"]
     default_config["system_unit"] = user["units"]["measure"]
@@ -798,6 +858,63 @@ def get_mycroft_compatible_config(mycroft_only=False):
     default_config["stt"] = speech["stt"]
     default_config["tts"] = local["tts"]
     default_config["Audio"] = get_neon_audio_config()
+    default_config["disable_xdg"] = False
+    # TODO: Location config
     # default_config["Display"]
 
     return default_config
+
+
+def write_mycroft_compatible_config(file_to_write: str = "~/.mycroft/mycroft.conf") -> str:
+    """
+    Generates a mycroft-compatible configuration and writes it to the specified file
+    :param file_to_write: config file to write out
+    :return: path to written config file
+    """
+    configuration = get_mycroft_compatible_config()
+    file_path = os.path.expanduser(file_to_write)
+    with open(file_path, 'w') as f:
+        json.dump(configuration, f, indent=4)
+    return file_path
+
+
+def create_config_from_setup_params(path=None) -> NGIConfig:
+    """
+    Populate a (probably) new local config with parameters gathered during setup
+    Args:
+        path: Optional config path
+    Returns:
+        NGIConfig object generated from environment vars
+    """
+    local_conf = get_neon_local_config(path)
+    pref_flags = local_conf["prefFlags"]
+    local_conf["prefFlags"]["devMode"] = os.environ.get("devMode", str(pref_flags["devMode"])).lower() == "true"
+    local_conf["prefFlags"]["autoStart"] = os.environ.get("autoStart", str(pref_flags["autoStart"])).lower() == "true"
+    local_conf["prefFlags"]["autoUpdate"] = os.environ.get("autoUpdate",
+                                                           str(pref_flags["autoUpdate"])).lower() == "true"
+    local_conf["skills"]["neon_token"] = os.environ.get("GITHUB_TOKEN")
+    local_conf["tts"]["module"] = os.environ.get("ttsModule", local_conf["tts"]["module"])
+    local_conf["stt"]["module"] = os.environ.get("sttModule", local_conf["stt"]["module"])
+    local_conf["stt"]["translation_module"] = os.environ.get("translateModule", local_conf["stt"]["translation_module"])
+    local_conf["stt"]["detection_module"] = os.environ.get("detectionModule", local_conf["stt"]["detection_module"])
+
+    if os.environ.get("installServer", "false") == "true":
+        local_conf["devVars"]["devType"] = "server"
+    else:
+        import platform
+        local_conf["devVars"]["devType"] = platform.system().lower()
+
+    local_conf["devVars"]["devName"] = os.environ.get("devName")
+
+    if local_conf["prefFlags"]["devMode"]:
+        root_path = os.environ.get("installerDir", local_conf.path)
+        local_conf["dirVars"]["skillsDir"] = os.path.join(root_path, "skills")
+        local_conf["dirVars"]["diagsDir"] = os.path.join(root_path, "Diagnostics")
+        local_conf["dirVars"]["logsDir"] = os.path.join(root_path, "logs")
+        local_conf["skills"]["default_skills"] =\
+            "https://raw.githubusercontent.com/NeonGeckoCom/neon-skills-submodules/dev/.utilities/DEFAULT-SKILLS-DEV"
+    else:
+        local_conf["dirVars"]["logsDir"] = "~/.local/share/neon/logs"
+    # TODO: Use XDG here DM
+    local_conf.write_changes()
+    return local_conf
