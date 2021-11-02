@@ -723,6 +723,7 @@ def get_neon_skills_config() -> dict:
     neon_skills["directory"] = os.path.expanduser(core_config["dirVars"].get("skillsDir"))
     neon_skills["directory_override"] = neon_skills["directory"]
     neon_skills["disable_osm"] = neon_skills["skill_manager"] != "osm"
+    neon_skills["blacklisted_skills"] = core_config["skills"]["blacklist"]
     if not isinstance(neon_skills["auto_update_interval"], float):
         try:
             neon_skills["auto_update_interval"] = float(neon_skills["auto_update_interval"])
