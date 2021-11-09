@@ -95,16 +95,16 @@ def get_neon_core_root():
     """
     site = sysconfig.get_paths()['platlib']
     if exists(join(site, 'neon_core')):
-        return join(site, 'neon_core')
+        return site
     for p in [path for path in sys.path if path != ""]:
         if exists(join(p, "neon_core")):
-            return join(p, "neon_core")
+            return p
         if re.match(".*/lib/python.*/site-packages", p):
             clean_path = "/".join(p.split("/")[0:-4])
             if exists(join(clean_path, "neon_core")):
-                return join(clean_path, "neon_core")
+                return clean_path
             elif exists(join(p, "neon_core")):
-                return join(p, "neon_core")
+                return p
     raise FileNotFoundError("Could not determine core directory")
 
 

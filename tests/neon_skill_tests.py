@@ -531,6 +531,9 @@ class NeonSkillTests(unittest.TestCase):
         self.assertTrue(skill.send_email("Test Message",
                                          "This is a test\ncalled from neon_skill_tests.py in neon-utils",
                                          email_addr="test@neongecko.com"))
+
+    def test_voc_match(self):
+        pass
 # TODO: NeonSkill Tests
 
 

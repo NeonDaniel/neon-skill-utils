@@ -224,20 +224,21 @@ def resolve_neon_resource_file(res_name: str) -> Optional[str]:
     :param res_name: resource name (i.e. snd/start_listening.wav) to locate
     :return: path to resource or None if resource is not found
     """
-    base_dir = os.path.join(os.path.dirname(__file__), "res")
-    res_file = os.path.join(base_dir, res_name)
-    if os.path.isfile(res_file):
-        return res_file
-
     from neon_utils.packaging_utils import get_neon_core_root
     try:
-        base_dir = os.path.join(get_neon_core_root(), "res")
+        base_dir = os.path.join(get_neon_core_root(), "neon_core", "res")
+        res_file = os.path.join(base_dir, res_name)
+        if os.path.isfile(res_file):
+            return res_file
     except FileNotFoundError:
         LOG.warning("No neon_core directory found")
         return None
 
+    base_dir = os.path.join(os.path.dirname(__file__), "res")
     res_file = os.path.join(base_dir, res_name)
     if os.path.isfile(res_file):
+        LOG.info(f"Resource resolved in neon_utils data")
         return res_file
+
     LOG.warning(f"Requested res_file not found: {res_file}")
     return None
