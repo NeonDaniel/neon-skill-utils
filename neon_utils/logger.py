@@ -29,7 +29,7 @@
 import logging
 from ovos_utils.log import LOG
 
-LOG.name = "neon-utils"
+LOG.name = "neon-utils" if LOG.name == "OVOS" else LOG.name
 
 logging.getLogger("filelock").setLevel(logging.WARNING)
 logging.getLogger("botocore").setLevel(logging.WARNING)
