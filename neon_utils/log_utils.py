@@ -41,16 +41,16 @@ LOG_DIR = os.path.expanduser(get_neon_local_config()["dirVars"]["logsDir"])
 
 
 class ServiceLog(Enum):
-    SPEECH = "voice.log"
-    SKILLS = "skills.log"
-    AUDIO = "audio.log"
-    ENCLOSURE = "enclosure.log"
-    BUS = "bus.log"
-    GUI = "gui.log"
-    DISPLAY = "display.log"
-    SERVER = "server.log"
-    CLIENT = "client.log"
-    OTHER = "extras.log"
+    SPEECH = "voice"
+    SKILLS = "skills"
+    AUDIO = "audio"
+    ENCLOSURE = "enclosure"
+    BUS = "bus"
+    GUI = "gui"
+    DISPLAY = "display"
+    SERVER = "server"
+    CLIENT = "client"
+    OTHER = "extras"
 
 
 def remove_old_logs(log_dir: str = LOG_DIR, history_to_retain: timedelta = timedelta(weeks=6)):
@@ -148,7 +148,7 @@ def init_log_for_module(service: ServiceLog = ServiceLog.OTHER, std_out: bool = 
     Initialize `LOG` singleton for the specified service in this thread
     Args:
         service: service requesting a logger object
-        std_out: if true, print logs to std_out instead of to files
+        std_out: if true, print logs to std_out in addition to files (will not modify an existing logger)
         max_bytes: maximum size in bytes allowed for this log file
         backup_count: number of archived logs to save
         level: minimum log level to filter to
@@ -156,8 +156,11 @@ def init_log_for_module(service: ServiceLog = ServiceLog.OTHER, std_out: bool = 
     if not isdir(LOG_DIR):
         LOG.info(f"Creating log directory: {LOG_DIR}")
         os.makedirs(LOG_DIR)
-    log_file = "stdout" if std_out else os.path.join(LOG_DIR, service.value)
-    LOG.init({"path": log_file,
+
+    LOG.name = service.value
+    LOG.init({"path": LOG_DIR,
               "max_bytes": max_bytes,
               "backup_count": backup_count,
               "level": level})
+
+    LOG.create_logger(service.value, std_out)

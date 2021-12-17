@@ -57,7 +57,7 @@ except ImportError:
     LOG.error(f"neon_core package not found, language detection/translation will be disabled.")
     DetectorFactory, TranslatorFactory = None, None
 
-LOG.name = "neon_skill"
+# LOG.name = "neon_skill"
 
 
 # TODO if accepted, make changes to QASkill and WikipediaSkill

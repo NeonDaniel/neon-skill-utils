@@ -27,6 +27,7 @@
 # SOFTWARE,  EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 import io
+import logging
 import os
 import sys
 import shutil
@@ -162,11 +163,23 @@ class LogUtilTests(unittest.TestCase):
     def test_init_log_for_module(self):
         from neon_utils.log_utils import init_log_for_module, ServiceLog, LOG
         init_log_for_module(ServiceLog.SPEECH)
-        self.assertEqual(basename(LOG.base_path), ServiceLog.SPEECH.value)
-        init_log_for_module(ServiceLog.AUDIO, True)
-        self.assertEqual(LOG.base_path, "stdout")
+        # self.assertEqual(basename(LOG.base_path), f"{ServiceLog.SPEECH.value}.log")
+        self.assertEqual(LOG.base_path, LOG_PATH)
+        self.assertEqual(LOG.name, ServiceLog.SPEECH.value)
+        logger = logging.getLogger(ServiceLog.SPEECH.value)
+        self.assertEqual(len(logger.handlers), 1)
+
         init_log_for_module(ServiceLog.AUDIO)
-        self.assertEqual(basename(LOG.base_path), ServiceLog.AUDIO.value)
+        # self.assertEqual(basename(LOG.base_path), f"{ServiceLog.AUDIO.value}.log")
+        self.assertEqual(LOG.name, ServiceLog.AUDIO.value)
+        self.assertEqual(LOG.base_path, LOG_PATH)
+        logger = logging.getLogger(ServiceLog.AUDIO.value)
+        self.assertEqual(len(logger.handlers), 1)
+
+        init_log_for_module(ServiceLog.BUS, True)
+        self.assertEqual(LOG.base_path, LOG_PATH)
+        logger = logging.getLogger(ServiceLog.BUS.value)
+        self.assertEqual(len(logger.handlers), 2)
 
         from neon_utils.logger import LOG as neon_log
         from ovos_utils.log import LOG as ovos_log
