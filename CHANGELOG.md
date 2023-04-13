@@ -1,8 +1,8 @@
 # Changelog
 
-## [Unreleased](https://github.com/NeonDaniel/neon-skill-utils/tree/HEAD)
+## [1.6.0a1](https://github.com/NeonDaniel/neon-skill-utils/tree/1.6.0a1) (2023-04-13)
 
-[Full Changelog](https://github.com/NeonDaniel/neon-skill-utils/compare/1.5.0a5...HEAD)
+[Full Changelog](https://github.com/NeonDaniel/neon-skill-utils/compare/1.5.0a5...1.6.0a1)
 
 **Merged pull requests:**
 
