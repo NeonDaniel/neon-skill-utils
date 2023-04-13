@@ -17,4 +17,4 @@ jobs:
       setup_py: "setup.py"
       publish_pypi: False
       publish_prerelease: True
-      update_changelog: True
+      update_changelog: False
