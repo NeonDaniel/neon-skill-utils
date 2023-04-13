@@ -10,10 +10,11 @@ on:
 
 jobs:
   publish_alpha_release:
-    uses: neongeckocom/.github/.github/workflows/publish_alpha_release.yml@master
+    uses: neongeckocom/.github/.github/workflows/publish_alpha_release.yml@FIX_FutureReleaseTag
     secrets: inherit
     with:
       version_file: "version.py"
       setup_py: "setup.py"
       publish_prerelease: True
       update_changelog: True
+      publish_pypi: False
