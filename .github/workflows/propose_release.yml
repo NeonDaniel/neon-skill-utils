@@ -11,11 +11,11 @@ on:
           - major
 jobs:
   update_version:
-    uses: neongeckocom/.github/.github/workflows/propose_semver_release.yml@master
+    uses: neongeckocom/.github/.github/workflows/propose_semver_release.yml@FIX_FutureReleaseTag
     with:
       branch: dev
       release_type: ${{ inputs.release_type }}
       update_changelog: True
   pull_changes:
-    uses: neongeckocom/.github/.github/workflows/pull_master.yml@FEAT_PullMasterParams
+    uses: neongeckocom/.github/.github/workflows/pull_master.yml@master
     needs: update_version
