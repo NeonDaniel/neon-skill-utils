@@ -14,7 +14,7 @@ jobs:
     uses: neongeckocom/.github/.github/workflows/propose_semver_release.yml@master
     with:
       branch: ${{ inputs.branch }}
-      release_type: ${{ inputs.release_type }}
+      release_type: ${{ github.ref_name }}
       update_changelog: True
   pull_changes:
     # TODO: Changelog in PR description
