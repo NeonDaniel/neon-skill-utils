@@ -17,7 +17,7 @@ jobs:
       release_type: ${{ inputs.release_type }}
       update_changelog: True
   pull_changes:
-    uses: neongeckocom/.github/.github/workflows/pull_master.yml@master
+    uses: neongeckocom/.github/.github/workflows/pull_master.yml@FEAT_PullMasterParams
     needs: update_version
     with:
       pr_reviewer: neonreviewers
