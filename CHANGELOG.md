@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.5.0](https://github.com/NeonDaniel/neon-skill-utils/tree/HEAD)
+## [Unreleased](https://github.com/NeonDaniel/neon-skill-utils/tree/HEAD)
 
 [Full Changelog](https://github.com/NeonDaniel/neon-skill-utils/compare/1.5.0a5...HEAD)
 
