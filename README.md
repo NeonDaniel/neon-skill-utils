@@ -4,4 +4,4 @@ Contains utilities for running Neon Skills on Mycroft and OVOS.
 
 Location information provided by [OpenStreetMap](https://openstreetmap.org/copyright).
 
-Force another automation run
+Force another automation run again
