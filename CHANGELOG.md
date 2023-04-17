@@ -1,44 +1,12 @@
 # Changelog
 
-## [1.7.0a2](https://github.com/NeonDaniel/neon-skill-utils/tree/1.7.0a2) (2023-04-13)
+## [Unreleased](https://github.com/NeonDaniel/neon-skill-utils/tree/HEAD)
 
-[Full Changelog](https://github.com/NeonDaniel/neon-skill-utils/compare/1.7.0a1...1.7.0a2)
-
-## [1.7.0a1](https://github.com/NeonDaniel/neon-skill-utils/tree/1.7.0a1) (2023-04-13)
-
-[Full Changelog](https://github.com/NeonDaniel/neon-skill-utils/compare/1.6.0a1...1.7.0a1)
-
-## [1.6.0a1](https://github.com/NeonDaniel/neon-skill-utils/tree/1.6.0a1) (2023-04-13)
-
-[Full Changelog](https://github.com/NeonDaniel/neon-skill-utils/compare/1.5.0a5...1.6.0a1)
+[Full Changelog](https://github.com/NeonDaniel/neon-skill-utils/compare/1.7.0a2...HEAD)
 
 **Merged pull requests:**
 
-- Test PR params [\#22](https://github.com/NeonDaniel/neon-skill-utils/pull/22) ([NeonDaniel](https://github.com/NeonDaniel))
-
-## [1.5.0a5](https://github.com/NeonDaniel/neon-skill-utils/tree/1.5.0a5) (2023-04-13)
-
-[Full Changelog](https://github.com/NeonDaniel/neon-skill-utils/compare/1.5.0a4...1.5.0a5)
-
-## [1.5.0a4](https://github.com/NeonDaniel/neon-skill-utils/tree/1.5.0a4) (2023-04-13)
-
-[Full Changelog](https://github.com/NeonDaniel/neon-skill-utils/compare/1.5.0a1...1.5.0a4)
-
-## [1.5.0a1](https://github.com/NeonDaniel/neon-skill-utils/tree/1.5.0a1) (2023-04-13)
-
-[Full Changelog](https://github.com/NeonDaniel/neon-skill-utils/compare/1.5.0a3...1.5.0a1)
-
-## [1.5.0a3](https://github.com/NeonDaniel/neon-skill-utils/tree/1.5.0a3) (2023-04-13)
-
-[Full Changelog](https://github.com/NeonDaniel/neon-skill-utils/compare/1.5.0a2...1.5.0a3)
-
-## [1.5.0a2](https://github.com/NeonDaniel/neon-skill-utils/tree/1.5.0a2) (2023-04-13)
-
-[Full Changelog](https://github.com/NeonDaniel/neon-skill-utils/compare/0.6.2...1.5.0a2)
-
-## [0.6.2](https://github.com/NeonDaniel/neon-skill-utils/tree/0.6.2) (2021-07-19)
-
-[Full Changelog](https://github.com/NeonDaniel/neon-skill-utils/compare/db4866a0fb164ea138ae06fc0a77df76b24da944...0.6.2)
+- Test changelog updates since last stable tag [\#26](https://github.com/NeonDaniel/neon-skill-utils/pull/26) ([NeonDaniel](https://github.com/NeonDaniel))
 
 
 
