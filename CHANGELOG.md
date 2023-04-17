@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.8.0a3](https://github.com/NeonDaniel/neon-skill-utils/tree/1.8.0a3) (2023-04-17)
+
+[Full Changelog](https://github.com/NeonDaniel/neon-skill-utils/compare/1.8.0a2...1.8.0a3)
+
 ## [1.8.0a2](https://github.com/NeonDaniel/neon-skill-utils/tree/1.8.0a2) (2023-04-17)
 
 [Full Changelog](https://github.com/NeonDaniel/neon-skill-utils/compare/1.8.0a1...1.8.0a2)
@@ -47,10 +51,6 @@
 ## [1.5.0a2](https://github.com/NeonDaniel/neon-skill-utils/tree/1.5.0a2) (2023-04-13)
 
 [Full Changelog](https://github.com/NeonDaniel/neon-skill-utils/compare/0.6.2...1.5.0a2)
-
-## [0.6.2](https://github.com/NeonDaniel/neon-skill-utils/tree/0.6.2) (2021-07-19)
-
-[Full Changelog](https://github.com/NeonDaniel/neon-skill-utils/compare/db4866a0fb164ea138ae06fc0a77df76b24da944...0.6.2)
 
 
 
